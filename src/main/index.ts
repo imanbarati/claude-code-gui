@@ -1,11 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import * as fs from 'node:fs'
 import Store from 'electron-store'
 import { IPC, DEFAULT_SETTINGS } from '@shared/types'
 import type { Settings, RunRequest, AgentEvent, ChatMessage, Conversation, ApprovalDecision, ToolPreview, ToolCall } from '@shared/types'
 import type { ChatTurn } from '../agent/backends/types'
 import { getBackend, listModels } from '../agent/orchestrator'
+import { expandMentions, extractMentions } from '../agent/context'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -169,6 +171,10 @@ function registerIpc(): void {
     }
     const historySnapshot = [...historyTurns]
 
+    // Expand @file mentions into context before sending to the backend.
+    const workdir = req.settings.workdir || process.cwd()
+    const expanded = expandMentions(req.prompt, { workdir })
+
     // Track the assistant's final text so we can append it to history.
     let assistantText = ''
 
@@ -176,7 +182,7 @@ function registerIpc(): void {
       await getBackend(req.settings.backend).run({
         settings: req.settings,
         history: historySnapshot,
-        prompt: req.prompt,
+        prompt: expanded.prompt,
         onEvent: (event) => {
           if (event.type === 'assistant_message') assistantText = event.message.content
           if (event.type === 'assistant_delta') assistantText += event.text
@@ -197,6 +203,56 @@ function registerIpc(): void {
       if (currentAbort === abort) currentAbort = null
     }
   })
+
+  // Preview which @file mentions exist (for chips in the composer).
+  ipcMain.handle('agent:previewMentions', (_e, prompt: string, workdir: string) => {
+    return extractMentions(prompt).map((rel) => {
+      const abs = path.resolve(workdir || process.cwd(), rel)
+      let exists = false
+      try {
+        exists = fs.existsSync(abs) && fs.statSync(abs).isFile()
+      } catch {
+        exists = false
+      }
+      return { path: rel, exists }
+    })
+  })
+
+  // Export the conversation to a Markdown file chosen by the user.
+  ipcMain.handle(IPC.exportChat, async () => {
+    if (!mainWindow) return null
+    const conv = store.get('conversation')
+    const md = conversationToMarkdown(conv.messages)
+    const res = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export chat',
+      defaultPath: 'claude-code-chat.md',
+      filters: [{ name: 'Markdown', extensions: ['md'] }]
+    })
+    if (res.canceled || !res.filePath) return null
+    fs.writeFileSync(res.filePath, md, 'utf8')
+    return res.filePath
+  })
+}
+
+// Render the conversation as Markdown for export.
+function conversationToMarkdown(messages: ChatMessage[]): string {
+  const lines: string[] = ['# Claude Code GUI — Chat Export', '', `_Exported ${new Date().toLocaleString()}_`, '']
+  for (const m of messages) {
+    if (m.role === 'user') {
+      lines.push('## 🧑 You', '', m.content, '')
+    } else if (m.role === 'assistant') {
+      if (m.content) lines.push('## 🤖 Agent', '', m.content, '')
+      for (const call of m.toolCalls ?? []) {
+        const result = m.toolResults?.find((r) => r.id === call.id)
+        lines.push(`**🔧 Tool: \`${call.name}\`**`, '', '```json', JSON.stringify(call.args, null, 2), '```')
+        if (result) {
+          lines.push('', `_${result.ok ? '✓ ok' : '✗ error'}_`, '', '```', result.output, '```')
+        }
+        lines.push('')
+      }
+    }
+  }
+  return lines.join('\n')
 }
 
 app.whenReady().then(() => {

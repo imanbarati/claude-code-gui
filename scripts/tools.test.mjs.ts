@@ -84,6 +84,24 @@ async function main(): Promise<void> {
   const cFail = await runTool(ctx, { id: '10', name: 'run_command', args: { command: process.platform === 'win32' ? 'exit /b 3' : 'exit 3' } })
   check('run_command reports failure exit code', !cFail.ok && /exit code 3/.test(cFail.output), cFail.output)
 
+  // --- @file mention context expansion ---
+  const { extractMentions, expandMentions } = await import('../src/agent/context')
+  const m1 = extractMentions('look at @hello.txt and @"a/b/c.py" plus @src/index.ts')
+  check('extractMentions finds bare + quoted', m1.includes('hello.txt') && m1.includes('a/b/c.py') && m1.includes('src/index.ts'), JSON.stringify(m1))
+
+  const exp = expandMentions('please review @hello.txt', ctx)
+  check('expandMentions attaches existing file', exp.attached.includes('hello.txt'), JSON.stringify(exp.attached))
+  check('expandMentions injects file content', exp.prompt.includes('File: hello.txt') && exp.prompt.includes('line1'), exp.prompt.slice(0, 80))
+
+  const expMissing = expandMentions('check @does-not-exist.xyz', ctx)
+  check('expandMentions reports missing', expMissing.missing.includes('does-not-exist.xyz') && expMissing.prompt === 'check @does-not-exist.xyz')
+
+  const expEsc = expandMentions('read @../escape.txt', ctx)
+  check('expandMentions blocks escape as missing', expEsc.missing.includes('../escape.txt'), JSON.stringify(expEsc.missing))
+
+  const noMention = expandMentions('just a normal prompt', ctx)
+  check('expandMentions passthrough when none', noMention.prompt === 'just a normal prompt' && noMention.attached.length === 0)
+
   console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : failures + ' TEST(S) FAILED'}`)
   process.exit(failures === 0 ? 0 : 1)
 }

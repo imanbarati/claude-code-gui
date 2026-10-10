@@ -21,6 +21,8 @@ export function App(): JSX.Element {
   const [running, setRunning] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [approval, setApproval] = useState<PendingApproval | null>(null)
+  const [mentions, setMentions] = useState<Array<{ path: string; exists: boolean }>>([])
+  const [toast, setToast] = useState<string>('')
   const chatRef = useRef<HTMLDivElement>(null)
 
   // Load settings + persisted conversation on startup.
@@ -36,6 +38,25 @@ export function App(): JSX.Element {
     }, 400)
     return () => clearTimeout(t)
   }, [messages])
+
+  // Preview @file mentions in the composer (debounced).
+  useEffect(() => {
+    if (!input.includes('@')) {
+      setMentions([])
+      return
+    }
+    const t = setTimeout(() => {
+      window.api.previewMentions(input, settings.workdir).then(setMentions).catch(() => setMentions([]))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [input, settings.workdir])
+
+  // Auto-dismiss toast.
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(''), 2600)
+    return () => clearTimeout(t)
+  }, [toast])
 
   useEffect(() => {
     const off = window.api.onAgentEvent((event: AgentEvent) => {
@@ -198,6 +219,15 @@ export function App(): JSX.Element {
     setRunning(false)
     window.api.clearConversation().catch(() => {})
   }
+
+  const exportChat = (): void => {
+    window.api
+      .exportChat()
+      .then((p) => {
+        if (p) setToast(`Exported to ${p}`)
+      })
+      .catch((e: unknown) => setToast(`Export failed: ${e instanceof Error ? e.message : String(e)}`))
+  }
   void canRun
   void cancel
 
@@ -208,6 +238,9 @@ export function App(): JSX.Element {
         <h1>Claude Code GUI</h1>
         {settings.workdir && <span className="workdir-pill">{settings.workdir}</span>}
         <div className="spacer" />
+        <button className="btn" onClick={exportChat} disabled={messages.length === 0} title="Export this chat to Markdown">
+          ⤓ Export
+        </button>
         <button className="btn" onClick={newChat} disabled={running} title="Start a fresh conversation">
           ＋ New Chat
         </button>
@@ -217,6 +250,8 @@ export function App(): JSX.Element {
       </div>
 
       {approval && <ApprovalModal preview={approval.preview} call={approval.call} onDecide={decideApproval} />}
+
+      {toast && <div className="toast">{toast}</div>}
 
       <div className="body">
         <div className="main-col">
@@ -235,9 +270,18 @@ export function App(): JSX.Element {
           </div>
 
           <div className="composer">
+            {mentions.length > 0 && (
+              <div className="mention-chips">
+                {mentions.map((m) => (
+                  <span key={m.path} className={`chip ${m.exists ? 'ok' : 'missing'}`} title={m.path}>
+                    📎 {m.path} {m.exists ? '' : '(not found)'}
+                  </span>
+                ))}
+              </div>
+            )}
             <textarea
               value={input}
-              placeholder={running ? 'Working…' : 'Ask the agent to do something (e.g. "create a Python hello world and run it")'}
+              placeholder={running ? 'Working…' : 'Ask the agent… (use @filename to attach a file as context)'}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {

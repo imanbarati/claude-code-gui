@@ -107,5 +107,6 @@ export const IPC = {
   approveTool: 'agent:approve',
   getConversation: 'conversation:get',
   setConversation: 'conversation:set',
-  clearConversation: 'conversation:clear'
+  clearConversation: 'conversation:clear',
+  exportChat: 'conversation:export'
 } as const

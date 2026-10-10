@@ -13,6 +13,9 @@ const api = {
   getConversation: (): Promise<Conversation> => ipcRenderer.invoke(IPC.getConversation),
   setConversation: (c: Conversation): Promise<Conversation> => ipcRenderer.invoke(IPC.setConversation, c),
   clearConversation: (): Promise<void> => ipcRenderer.invoke(IPC.clearConversation),
+  exportChat: (): Promise<string | null> => ipcRenderer.invoke(IPC.exportChat),
+  previewMentions: (prompt: string, workdir: string): Promise<Array<{ path: string; exists: boolean }>> =>
+    ipcRenderer.invoke('agent:previewMentions', prompt, workdir),
   onAgentEvent: (cb: (event: AgentEvent) => void): (() => void) => {
     const listener = (_e: unknown, event: AgentEvent): void => cb(event)
     ipcRenderer.on(IPC.agentEvent, listener)

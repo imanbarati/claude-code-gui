@@ -17,6 +17,8 @@ settings panel.
 - 🔴 **Live streaming shell output**: watch builds, tests, and commands run in real time, with a pulsing "running…" indicator.
 - 📝 **Markdown rendering**: agent replies render code blocks (with copy buttons), lists, headings, and formatting.
 - 💬 **Multi-turn memory** — the agent remembers the conversation; chats **persist** across restarts, with a **＋ New Chat** button to reset.
+- 📎 **@file context** — type `@filename` in the composer to attach a file's contents to your prompt (live chips show which files were found).
+- ⤓ **Export chat** — save the whole conversation (with tool calls & outputs) to a Markdown file.
 - ⚙️ **Settings panel** to pick backend, model, API key, Ollama URL, and working directory.
 - 📦 **Windows installer** (`.exe`) and portable build via electron-builder.
 - 🚀 **Fork & push ready**: GitHub Actions build on every push, release on tags.
