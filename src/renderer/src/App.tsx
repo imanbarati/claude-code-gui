@@ -28,6 +28,8 @@ export function App(): JSX.Element {
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [activeId, setActiveId] = useState<string>('')
   const [showSidebar, setShowSidebar] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const [stepCount, setStepCount] = useState(0)
   const chatRef = useRef<HTMLDivElement>(null)
 
   const refreshConversations = (): void => {
@@ -71,6 +73,37 @@ export function App(): JSX.Element {
     const t = setTimeout(() => setToast(''), 2600)
     return () => clearTimeout(t)
   }, [toast])
+
+  // Tick the elapsed timer while a run is active.
+  useEffect(() => {
+    if (!running) return
+    const start = Date.now()
+    setElapsed(0)
+    const iv = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000)
+    return () => clearInterval(iv)
+  }, [running])
+
+  // Global keyboard shortcuts.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        newChat()
+      } else if (mod && e.key === '/') {
+        e.preventDefault()
+        setShowSettings((s) => !s)
+      } else if (mod && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        setShowSidebar((s) => !s)
+      } else if (e.key === 'Escape' && running) {
+        cancel()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running])
 
   useEffect(() => {
     const off = window.api.onAgentEvent((event: AgentEvent) => {
@@ -166,6 +199,10 @@ export function App(): JSX.Element {
           setApproval({ call: event.call, preview: event.preview })
           break
         }
+        case 'step': {
+          setStepCount(event.step + 1)
+          break
+        }
         case 'done': {
           setMessages((prev) => prev.filter((m) => m.id !== 'streaming'))
           setRunning(false)
@@ -200,6 +237,8 @@ export function App(): JSX.Element {
       { id: uid('u'), role: 'user', content: prompt, createdAt: Date.now() }
     ])
     setInput('')
+    setStepCount(0)
+    setElapsed(0)
     setRunning(true)
     try {
       await window.api.runAgent({ prompt, settings })
@@ -316,6 +355,13 @@ export function App(): JSX.Element {
                 Pick a backend in <em>Settings</em>, choose your project folder,
                 <br />
                 then describe what you want to build or fix.
+                <div className="shortcuts">
+                  <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> send</span>
+                  <span><kbd>Ctrl</kbd>+<kbd>K</kbd> new chat</span>
+                  <span><kbd>Ctrl</kbd>+<kbd>B</kbd> chats</span>
+                  <span><kbd>Ctrl</kbd>+<kbd>/</kbd> settings</span>
+                  <span><kbd>Esc</kbd> stop</span>
+                </div>
               </div>
             ) : (
               messages.map((m) => <MessageView key={m.id} message={m} />)
@@ -323,6 +369,17 @@ export function App(): JSX.Element {
           </div>
 
           <div className="composer">
+            {running && (
+              <div className="run-status">
+                <span className="run-dot" />
+                <span>Agent working…</span>
+                <span className="run-meta">
+                  {stepCount > 0 ? `${stepCount} step${stepCount === 1 ? '' : 's'}` : 'thinking'}
+                  {' · '}
+                  {elapsed}s
+                </span>
+              </div>
+            )}
             <div className="quick-actions">
               {PROMPT_TEMPLATES.map((t) => (
                 <button

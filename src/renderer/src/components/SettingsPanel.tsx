@@ -15,6 +15,20 @@ const BACKENDS: Array<{ id: BackendId; label: string; free: boolean; note: strin
 export function SettingsPanel({ settings, onChange }: Props): JSX.Element {
   const [models, setModels] = useState<string[]>([])
   const [modelStatus, setModelStatus] = useState<string>('')
+  const [connStatus, setConnStatus] = useState<{ ok: boolean; message: string } | null>(null)
+  const [testing, setTesting] = useState(false)
+
+  const runTest = (): void => {
+    setTesting(true)
+    setConnStatus(null)
+    window.api
+      .testConnection(settings)
+      .then((r) => setConnStatus(r))
+      .catch((e: unknown) =>
+        setConnStatus({ ok: false, message: e instanceof Error ? e.message : String(e) })
+      )
+      .finally(() => setTesting(false))
+  }
 
   useEffect(() => {
     if (settings.backend === 'ollama') {
@@ -58,6 +72,14 @@ export function SettingsPanel({ settings, onChange }: Props): JSX.Element {
           ))}
         </select>
         <div className="hint">{current.note}</div>
+        <div className="row" style={{ marginTop: 8 }}>
+          <button className="btn" onClick={runTest} disabled={testing}>
+            {testing ? 'Testing…' : '⚡ Test connection'}
+          </button>
+        </div>
+        {connStatus && (
+          <div className={`conn-status ${connStatus.ok ? 'ok' : 'bad'}`}>{connStatus.message}</div>
+        )}
       </div>
 
       <div className="section-title">Project</div>

@@ -18,6 +18,8 @@ settings panel.
 - 📝 **Markdown rendering**: agent replies render code blocks (with copy buttons), lists, headings, and formatting.
 - 🎨 **Syntax highlighting**: code blocks are colorized for JS/TS, Python, Go, Rust, Java, C/C++, Bash, JSON and more.
 - ⚡ **Quick actions**: one-click starter prompts (Explain, Write tests, Review & fix, Refactor, Docs, Scaffold).
+- ⚡ **Connection test**: verify your backend (Ollama / OpenRouter / Claude CLI) is reachable before you start.
+- ⌨️ **Keyboard shortcuts**: `Ctrl+Enter` send, `Ctrl+K` new chat, `Ctrl+B` chats, `Ctrl+/` settings, `Esc` stop — plus a live step/elapsed-time indicator while the agent works.
 - 💬 **Multi-turn memory** — the agent remembers the conversation; chats **persist** across restarts, with a **＋ New Chat** button to reset.
 - 🗂️ **Conversation history sidebar** — multiple saved chats you can switch between, create, and delete (auto-titled from the first message).
 - 📎 **@file context** — type `@filename` in the composer to attach a file's contents to your prompt (live chips show which files were found).

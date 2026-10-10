@@ -7,6 +7,8 @@ const api = {
   setSettings: (s: Settings): Promise<Settings> => ipcRenderer.invoke(IPC.setSettings, s),
   pickWorkdir: (): Promise<string | null> => ipcRenderer.invoke(IPC.pickWorkdir),
   listOllamaModels: (s: Settings): Promise<string[]> => ipcRenderer.invoke(IPC.listOllamaModels, s),
+  testConnection: (s: Settings): Promise<{ ok: boolean; message: string }> =>
+    ipcRenderer.invoke(IPC.testConnection, s),
   runAgent: (req: RunRequest): Promise<void> => ipcRenderer.invoke(IPC.runAgent, req),
   cancelAgent: (): Promise<void> => ipcRenderer.invoke(IPC.cancelAgent),
   approveTool: (decision: ApprovalDecision): Promise<void> => ipcRenderer.invoke(IPC.approveTool, decision),

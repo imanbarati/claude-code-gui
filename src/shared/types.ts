@@ -117,6 +117,7 @@ export const IPC = {
   cancelAgent: 'agent:cancel',
   agentEvent: 'agent:event',
   listOllamaModels: 'ollama:list',
+  testConnection: 'backend:testConnection',
   approveTool: 'agent:approve',
   getConversation: 'conversation:get',
   setConversation: 'conversation:set',

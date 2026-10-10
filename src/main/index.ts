@@ -6,7 +6,7 @@ import Store from 'electron-store'
 import { IPC, DEFAULT_SETTINGS } from '@shared/types'
 import type { Settings, RunRequest, AgentEvent, ChatMessage, Conversation, ConversationSummary, ApprovalDecision, ToolPreview, ToolCall } from '@shared/types'
 import type { ChatTurn } from '../agent/backends/types'
-import { getBackend, listModels } from '../agent/orchestrator'
+import { getBackend, listModels, testConnection } from '../agent/orchestrator'
 import { expandMentions, extractMentions } from '../agent/context'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -174,6 +174,10 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.listOllamaModels, async (_e, settings: Settings) => {
     return listModels(settings)
+  })
+
+  ipcMain.handle(IPC.testConnection, async (_e, settings: Settings) => {
+    return testConnection(settings)
   })
 
   ipcMain.handle(IPC.getConversation, (): Conversation => getActiveConversation())
