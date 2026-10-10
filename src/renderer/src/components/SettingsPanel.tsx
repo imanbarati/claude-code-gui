@@ -91,14 +91,8 @@ export function SettingsPanel({ settings, onChange }: Props): JSX.Element {
             <input value={settings.claudeCommand} onChange={(e) => set('claudeCommand', e.target.value)} />
             <div className="hint">Install: npm i -g @anthropic-ai/claude-code</div>
           </div>
-          <div className="field check">
-            <input
-              id="auto"
-              type="checkbox"
-              checked={settings.autoApproveTools}
-              onChange={(e) => set('autoApproveTools', e.target.checked)}
-            />
-            <label htmlFor="auto">Auto-approve tool use (skip permissions)</label>
+          <div className="hint">
+            <span className="badge">note</span> Claude Code runs its own tools using your account.
           </div>
         </>
       )}
@@ -149,6 +143,18 @@ export function SettingsPanel({ settings, onChange }: Props): JSX.Element {
       )}
 
       <div className="section-title">Agent</div>
+      <div className="field check">
+        <input
+          id="auto"
+          type="checkbox"
+          checked={settings.autoApproveTools}
+          onChange={(e) => set('autoApproveTools', e.target.checked)}
+        />
+        <label htmlFor="auto">Auto-approve tool use (skip the confirm dialog)</label>
+      </div>
+      <div className="hint">
+        When off, the app asks before each file write or shell command and shows a diff preview.
+      </div>
       <div className="field">
         <label>Max steps</label>
         <input

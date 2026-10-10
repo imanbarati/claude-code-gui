@@ -1,5 +1,5 @@
 // Functional smoke test for the agent tools. Bundled with esbuild then run with node.
-import { runTool, TOOL_SPECS } from '../src/agent/tools'
+import { runTool, TOOL_SPECS, previewTool, simpleDiff, isMutatingTool } from '../src/agent/tools'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -45,6 +45,32 @@ async function main(): Promise<void> {
   // unknown tool
   const unk = await runTool(ctx, { id: '8', name: 'frobnicate', args: {} })
   check('unknown tool handled', !unk.ok && unk.output.includes('Unknown tool'))
+
+  // --- preview / diff / mutating classification ---
+  check('isMutatingTool write/command', isMutatingTool('write_file') && isMutatingTool('run_command'))
+  check('isMutatingTool read=false', !isMutatingTool('read_file') && !isMutatingTool('list_dir'))
+
+  // simpleDiff: only changed lines marked, context preserved
+  const d = simpleDiff('a\nb\nc\nd\ne', 'a\nb\nC\nd\ne')
+  check('simpleDiff marks -/+', d.includes('- c') && d.includes('+ C'), d)
+  check('simpleDiff keeps context', d.includes('  a') && d.includes('  d'))
+
+  // previewTool: create preview for new file (all + lines)
+  const pCreate = previewTool(ctx, { id: 'p1', name: 'write_file', args: { path: 'new.md', content: 'hi\nthere' } })
+  check('preview create kind=write', pCreate.mutates && pCreate.kind === 'write' && pCreate.summary.includes('Create'))
+  check('preview create has +diff', !!pCreate.diff && pCreate.diff.includes('+ hi'))
+
+  // previewTool: overwrite preview shows diff against existing hello.txt
+  const pOver = previewTool(ctx, { id: 'p2', name: 'write_file', args: { path: 'hello.txt', content: 'line1\nCHANGED' } })
+  check('preview overwrite says Overwrite', pOver.summary.includes('Overwrite') && !!pOver.diff && pOver.diff.includes('+ CHANGED'))
+
+  // previewTool: command preview
+  const pCmd = previewTool(ctx, { id: 'p3', name: 'run_command', args: { command: 'echo hi' } })
+  check('preview command kind=command', pCmd.mutates && pCmd.kind === 'command' && pCmd.command === 'echo hi')
+
+  // previewTool: escape path is blocked (never throws)
+  const pEsc = previewTool(ctx, { id: 'p4', name: 'write_file', args: { path: '../x.txt', content: 'x' } })
+  check('preview escape blocked', pEsc.summary.includes('Blocked'))
 
   console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : failures + ' TEST(S) FAILED'}`)
   process.exit(failures === 0 ? 0 : 1)

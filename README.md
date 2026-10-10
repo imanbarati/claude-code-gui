@@ -13,6 +13,8 @@ settings panel.
 - 🔀 **Backend switcher**: Claude Code CLI, Ollama (free/local), or OpenRouter (free tier).
 - 🛠️ **Real agentic tools**: `read_file`, `write_file`, `list_dir`, `run_command` — sandboxed to your chosen project folder.
 - 👀 **Live tool cards** showing exactly what the agent reads, writes, and runs.
+- 🛡️ **Approval gate + diff preview**: before any file write or shell command, you get a confirm dialog with a unified diff — deny to stop it.
+- 💬 **Multi-turn memory** — the agent remembers the conversation; chats **persist** across restarts, with a **＋ New Chat** button to reset.
 - ⚙️ **Settings panel** to pick backend, model, API key, Ollama URL, and working directory.
 - 📦 **Windows installer** (`.exe`) and portable build via electron-builder.
 - 🚀 **Fork & push ready**: GitHub Actions build on every push, release on tags.
@@ -64,7 +66,7 @@ git tag v0.1.0 && git push origin v0.1.0
 ## Security notes
 
 - File/command tools are restricted to the **working directory** you set; paths that escape it are rejected.
-- The Claude Code "auto-approve" toggle maps to `--dangerously-skip-permissions`. Only enable it on projects you trust.
+- With **Auto-approve** off (default), every file write and shell command shows an **approval dialog with a diff preview** first. The Claude Code toggle maps to `--dangerously-skip-permissions`. Only enable auto-approve on projects you trust.
 - API keys are stored locally in your OS user-data folder via `electron-store`. Never commit them.
 
 ## Project layout

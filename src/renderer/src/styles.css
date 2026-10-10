@@ -129,3 +129,38 @@ html, body, #root {
 .badge.free { color: var(--ok); border-color: #1f3a26; background: #10241a; }
 
 .empty { color: var(--muted); text-align: center; margin: auto; font-size: 14px; line-height: 1.6; }
+
+/* Approval modal */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+  backdrop-filter: blur(2px);
+}
+.modal {
+  width: 640px; max-width: 92vw; max-height: 82vh; overflow: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5); padding: 18px;
+}
+.modal-head { display: flex; align-items: center; gap: 10px; }
+.modal-head h3 { margin: 0; font-size: 16px; }
+.modal-icon {
+  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--tool); font-size: 14px;
+}
+.modal-summary { margin: 12px 0; font-size: 14px; color: var(--text); }
+.modal-cmd {
+  font-family: "Cascadia Code","Consolas",monospace; font-size: 13px;
+  background: #0c0e14; border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; color: var(--text); white-space: pre-wrap; word-break: break-word;
+}
+.modal-cmd .prompt { color: var(--ok); }
+.modal-diff {
+  font-family: "Cascadia Code","Consolas",monospace; font-size: 12px; line-height: 1.45;
+  background: #0c0e14; border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; margin: 0; white-space: pre-wrap; word-break: break-word;
+  max-height: 300px; overflow: auto;
+}
+.modal-note { margin: 12px 0; font-size: 12px; color: var(--muted); }
+.modal-note code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.modal-actions .btn { padding: 8px 18px; font-size: 14px; }

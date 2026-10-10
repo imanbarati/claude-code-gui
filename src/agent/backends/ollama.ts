@@ -1,7 +1,7 @@
 import type { Backend, BackendRunArgs } from './types'
-import { systemPrompt } from './types'
-import { TOOL_SPECS, runTool, type ToolContext } from '../tools'
-import type { ToolCall, ToolResult } from '@shared/types'
+import { systemPrompt, runToolsWithApproval } from './types'
+import { TOOL_SPECS, type ToolContext } from '../tools'
+import type { ToolCall } from '@shared/types'
 
 function makeId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -24,7 +24,7 @@ export class OllamaBackend implements Backend {
   }
 
   async run(args: BackendRunArgs): Promise<void> {
-    const { settings, history, prompt, onEvent, signal } = args
+    const { settings, history, prompt, onEvent, signal, requestApproval } = args
     const ctx: ToolContext = { workdir: settings.workdir || process.cwd() }
 
     const messages: OllamaMessage[] = [
@@ -88,14 +88,14 @@ export class OllamaBackend implements Backend {
         return
       }
 
-      // Announce calls, run them, feed results back.
-      const results: ToolResult[] = []
-      for (const call of toolCalls) {
-        onEvent({ type: 'tool_call', call })
-        const result = await runTool(ctx, call)
-        onEvent({ type: 'tool_result', result })
-        results.push(result)
-      }
+      // Announce calls, run them (with approval gate), feed results back.
+      const results = await runToolsWithApproval(
+        ctx,
+        toolCalls,
+        settings.autoApproveTools,
+        onEvent,
+        requestApproval
+      )
 
       messages.push({ role: 'assistant', content: msg.content ?? '', tool_calls: msg.tool_calls })
       for (const r of results) {

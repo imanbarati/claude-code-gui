@@ -64,12 +64,34 @@ export type AgentEvent =
   | { type: 'tool_call'; call: ToolCall }
   | { type: 'tool_result'; result: ToolResult }
   | { type: 'step'; step: number }
+  | { type: 'tool_approval'; call: ToolCall; preview: ToolPreview }
   | { type: 'done' }
   | { type: 'error'; message: string }
+
+// A human-readable preview of a mutating tool call, shown before approval.
+export interface ToolPreview {
+  mutates: boolean
+  kind: 'write' | 'command' | 'read'
+  path?: string
+  summary: string
+  diff?: string
+  command?: string
+}
 
 export interface RunRequest {
   prompt: string
   settings: Settings
+}
+
+// Sent from renderer -> main to answer an approval prompt.
+export interface ApprovalDecision {
+  callId: string
+  approved: boolean
+}
+
+// The persisted conversation (survives app restart).
+export interface Conversation {
+  messages: ChatMessage[]
 }
 
 // IPC channel names.
@@ -80,5 +102,9 @@ export const IPC = {
   runAgent: 'agent:run',
   cancelAgent: 'agent:cancel',
   agentEvent: 'agent:event',
-  listOllamaModels: 'ollama:list'
+  listOllamaModels: 'ollama:list',
+  approveTool: 'agent:approve',
+  getConversation: 'conversation:get',
+  setConversation: 'conversation:set',
+  clearConversation: 'conversation:clear'
 } as const

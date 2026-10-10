@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS } from '@shared/types'
-import type { Settings, ChatMessage, AgentEvent } from '@shared/types'
+import type { Settings, ChatMessage, AgentEvent, ToolPreview, ToolCall } from '@shared/types'
 import { SettingsPanel } from './components/SettingsPanel'
+import { ApprovalModal } from './components/ApprovalModal'
 
 function uid(p: string): string {
   return `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+}
+
+interface PendingApproval {
+  call: ToolCall
+  preview: ToolPreview
 }
 
 export function App(): JSX.Element {
@@ -13,11 +19,22 @@ export function App(): JSX.Element {
   const [input, setInput] = useState('')
   const [running, setRunning] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [approval, setApproval] = useState<PendingApproval | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
 
+  // Load settings + persisted conversation on startup.
   useEffect(() => {
     window.api.getSettings().then(setSettings).catch(() => {})
+    window.api.getConversation().then((c) => setMessages(c.messages ?? [])).catch(() => {})
   }, [])
+
+  // Persist conversation whenever it changes (debounced-ish via timeout).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      window.api.setConversation({ messages }).catch(() => {})
+    }, 400)
+    return () => clearTimeout(t)
+  }, [messages])
 
   useEffect(() => {
     const off = window.api.onAgentEvent((event: AgentEvent) => {
@@ -72,6 +89,10 @@ export function App(): JSX.Element {
           })
           break
         }
+        case 'tool_approval': {
+          setApproval({ call: event.call, preview: event.preview })
+          break
+        }
         case 'done': {
           setMessages((prev) => prev.filter((m) => m.id !== 'streaming'))
           setRunning(false)
@@ -121,7 +142,23 @@ export function App(): JSX.Element {
 
   const cancel = (): void => {
     window.api.cancelAgent()
+    setApproval(null)
     setRunning(false)
+  }
+
+  const decideApproval = (approved: boolean): void => {
+    if (approval) {
+      window.api.approveTool({ callId: approval.call.id, approved }).catch(() => {})
+    }
+    setApproval(null)
+  }
+
+  const newChat = (): void => {
+    if (running) window.api.cancelAgent()
+    setMessages([])
+    setApproval(null)
+    setRunning(false)
+    window.api.clearConversation().catch(() => {})
   }
   void canRun
   void cancel
@@ -133,10 +170,15 @@ export function App(): JSX.Element {
         <h1>Claude Code GUI</h1>
         {settings.workdir && <span className="workdir-pill">{settings.workdir}</span>}
         <div className="spacer" />
+        <button className="btn" onClick={newChat} disabled={running} title="Start a fresh conversation">
+          ＋ New Chat
+        </button>
         <button className="btn" onClick={() => setShowSettings((s) => !s)}>
           {showSettings ? 'Hide Settings' : '⚙ Settings'}
         </button>
       </div>
+
+      {approval && <ApprovalModal preview={approval.preview} call={approval.call} onDecide={decideApproval} />}
 
       <div className="body">
         <div className="main-col">

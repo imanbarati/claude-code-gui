@@ -3,20 +3,45 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import Store from 'electron-store'
 import { IPC, DEFAULT_SETTINGS } from '@shared/types'
-import type { Settings, RunRequest, AgentEvent } from '@shared/types'
+import type { Settings, RunRequest, AgentEvent, ChatMessage, Conversation, ApprovalDecision, ToolPreview, ToolCall } from '@shared/types'
+import type { ChatTurn } from '../agent/backends/types'
 import { getBackend, listModels } from '../agent/orchestrator'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const store = new Store<{ settings: Settings }>({
+interface StoreSchema {
+  settings: Settings
+  conversation: Conversation
+}
+
+const store = new Store<StoreSchema>({
   name: 'claude-code-gui',
-  defaults: { settings: DEFAULT_SETTINGS }
+  defaults: { settings: DEFAULT_SETTINGS, conversation: { messages: [] } }
 })
 
 let mainWindow: BrowserWindow | null = null
 let currentAbort: AbortController | null = null
 
+// In-memory conversation history shared across turns of a session.
+let historyTurns: ChatTurn[] = []
+
+// Pending approval prompts keyed by tool-call id.
+const pendingApprovals = new Map<string, (approved: boolean) => void>()
+
 const APP_ROOT = app.getAppPath()
+
+// Convert stored chat messages into backend ChatTurns (user + assistant text only).
+function turnsFromMessages(messages: ChatMessage[]): ChatTurn[] {
+  const turns: ChatTurn[] = []
+  for (const m of messages) {
+    if (m.role === 'user' && m.content.trim()) {
+      turns.push({ role: 'user', content: m.content })
+    } else if (m.role === 'assistant' && m.content.trim()) {
+      turns.push({ role: 'assistant', content: m.content })
+    }
+  }
+  return turns
+}
 
 function resolveHtml(): string {
   return path.join(__dirname, '../renderer/index.html')
@@ -85,9 +110,33 @@ function registerIpc(): void {
     return listModels(settings)
   })
 
+  ipcMain.handle(IPC.getConversation, (): Conversation => store.get('conversation'))
+
+  ipcMain.handle(IPC.setConversation, (_e, conv: Conversation) => {
+    store.set('conversation', conv)
+    historyTurns = turnsFromMessages(conv.messages)
+    return conv
+  })
+
+  ipcMain.handle(IPC.clearConversation, () => {
+    store.set('conversation', { messages: [] })
+    historyTurns = []
+  })
+
   ipcMain.handle(IPC.cancelAgent, () => {
     currentAbort?.abort()
     currentAbort = null
+    // Resolve any pending approvals as denied so the backend can unwind.
+    for (const [, resolve] of pendingApprovals) resolve(false)
+    pendingApprovals.clear()
+  })
+
+  ipcMain.handle(IPC.approveTool, (_e, decision: ApprovalDecision) => {
+    const resolve = pendingApprovals.get(decision.callId)
+    if (resolve) {
+      resolve(decision.approved)
+      pendingApprovals.delete(decision.callId)
+    }
   })
 
   ipcMain.handle(IPC.runAgent, async (_e, req: RunRequest) => {
@@ -95,21 +144,56 @@ function registerIpc(): void {
     currentAbort = new AbortController()
     const abort = currentAbort
 
-    // Lightweight conversation history (extend as needed).
-    const history: Array<{ role: any; content: string }> = []
+    // Ask the user to approve a mutating tool; resolves via IPC.
+    const requestApproval = (call: ToolCall, preview: ToolPreview): Promise<boolean> => {
+      sendToRenderer({ type: 'tool_approval', call, preview })
+      return new Promise<boolean>((resolve) => {
+        pendingApprovals.set(call.id, resolve)
+        // If aborted while waiting, deny.
+        abort.signal.addEventListener(
+          'abort',
+          () => {
+            if (pendingApprovals.has(call.id)) {
+              pendingApprovals.delete(call.id)
+              resolve(false)
+            }
+          },
+          { once: true }
+        )
+      })
+    }
+
+    // Seed in-memory history from persisted conversation if empty.
+    if (historyTurns.length === 0) {
+      historyTurns = turnsFromMessages(store.get('conversation').messages)
+    }
+    const historySnapshot = [...historyTurns]
+
+    // Track the assistant's final text so we can append it to history.
+    let assistantText = ''
 
     try {
       await getBackend(req.settings.backend).run({
         settings: req.settings,
-        history,
+        history: historySnapshot,
         prompt: req.prompt,
-        onEvent: sendToRenderer,
-        signal: abort.signal
+        onEvent: (event) => {
+          if (event.type === 'assistant_message') assistantText = event.message.content
+          if (event.type === 'assistant_delta') assistantText += event.text
+          sendToRenderer(event)
+        },
+        signal: abort.signal,
+        requestApproval
       })
     } catch (e: any) {
       sendToRenderer({ type: 'error', message: e?.message ?? String(e) })
       sendToRenderer({ type: 'done' })
     } finally {
+      // Persist this turn into history for multi-turn context.
+      if (req.prompt.trim()) historyTurns.push({ role: 'user', content: req.prompt })
+      if (assistantText.trim()) historyTurns.push({ role: 'assistant', content: assistantText })
+      for (const [, resolve] of pendingApprovals) resolve(false)
+      pendingApprovals.clear()
       if (currentAbort === abort) currentAbort = null
     }
   })

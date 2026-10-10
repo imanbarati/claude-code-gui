@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { ToolCall, ToolResult } from '@shared/types'
+import type { ToolCall, ToolResult, ToolPreview } from '@shared/types'
 
 const execAsync = promisify(exec)
 
@@ -146,4 +146,90 @@ async function execTool(ctx: ToolContext, call: ToolCall): Promise<ToolResult> {
 
 export async function runTool(ctx: ToolContext, call: ToolCall): Promise<ToolResult> {
   return execTool(ctx, call)
+}
+
+
+// ---- Approval previews ------------------------------------------------------
+
+const MUTATING_TOOLS = new Set(['write_file', 'run_command'])
+
+export function isMutatingTool(name: string): boolean {
+  return MUTATING_TOOLS.has(name)
+}
+
+// A compact, dependency-free line diff using common prefix/suffix trimming.
+export function simpleDiff(oldStr: string, newStr: string): string {
+  const oldLines = oldStr.length ? oldStr.split(/\r?\n/) : []
+  const newLines = newStr.length ? newStr.split(/\r?\n/) : []
+
+  let prefix = 0
+  while (prefix < oldLines.length && prefix < newLines.length && oldLines[prefix] === newLines[prefix]) {
+    prefix++
+  }
+  let suffix = 0
+  while (
+    suffix < oldLines.length - prefix &&
+    suffix < newLines.length - prefix &&
+    oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
+  ) {
+    suffix++
+  }
+
+  const context = 2
+  const removed = oldLines.slice(prefix, oldLines.length - suffix)
+  const added = newLines.slice(prefix, newLines.length - suffix)
+
+  const lines: string[] = []
+  for (let i = Math.max(0, prefix - context); i < prefix; i++) lines.push(`  ${oldLines[i]}`)
+  for (const r of removed) lines.push(`- ${r}`)
+  for (const a of added) lines.push(`+ ${a}`)
+  for (let i = newLines.length - suffix; i < Math.min(newLines.length, newLines.length - suffix + context); i++) {
+    lines.push(`  ${newLines[i]}`)
+  }
+
+  return lines.join('\n')
+}
+
+// Build a preview of a tool call for the approval UI. Never throws.
+export function previewTool(ctx: ToolContext, call: ToolCall): ToolPreview {
+  const name = call.name
+  const args = call.args
+  try {
+    if (name === 'write_file') {
+      const rel = String(args.path ?? '')
+      const abs = safeResolve(ctx, rel)
+      const newContent = String(args.content ?? '')
+      let oldContent = ''
+      let exists = false
+      try {
+        oldContent = fs.readFileSync(abs, 'utf8')
+        exists = true
+      } catch {
+        exists = false
+      }
+      const oldLines = exists ? oldContent.split(/\r?\n/).length : 0
+      const newLines = newContent.split(/\r?\n/).length
+      return {
+        mutates: true,
+        kind: 'write',
+        path: rel,
+        summary: `${exists ? 'Overwrite' : 'Create'} ${rel} (${oldLines} → ${newLines} lines)`,
+        diff: exists
+          ? simpleDiff(oldContent, newContent)
+          : newContent.split(/\r?\n/).map((l) => `+ ${l}`).join('\n')
+      }
+    }
+    if (name === 'run_command') {
+      return {
+        mutates: true,
+        kind: 'command',
+        command: String(args.command ?? ''),
+        summary: 'Run command in project root'
+      }
+    }
+    return { mutates: false, kind: 'read', summary: `${name} (no changes)` }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { mutates: true, kind: 'read', summary: `Blocked: ${msg}` }
+  }
 }
