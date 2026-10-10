@@ -1,0 +1,149 @@
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import { exec } from 'node:child_process'
+import { promisify } from 'node:util'
+import type { ToolCall, ToolResult } from '@shared/types'
+
+const execAsync = promisify(exec)
+
+const MAX_FILE_CHARS = 120_000
+const MAX_OUTPUT_CHARS = 40_000
+
+export interface ToolContext {
+  workdir: string
+}
+
+export interface ToolSpec {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+// OpenAI/Ollama-style JSON schemas for tool declarations.
+export const TOOL_SPECS: ToolSpec[] = [
+  {
+    name: 'read_file',
+    description:
+      'Read the contents of a text file (relative to the project root). Returns line numbers.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to the file, relative to project root.' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'write_file',
+    description:
+      'Create or overwrite a file with the given content (relative to the project root). Creates parent directories.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path to the file, relative to project root.' },
+        content: { type: 'string', description: 'Full content to write.' }
+      },
+      required: ['path', 'content']
+    }
+  },
+  {
+    name: 'list_dir',
+    description: 'List the contents of a directory (relative to the project root).',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Directory path, relative to project root.' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'run_command',
+    description:
+      'Run a shell command inside the project root and return its combined stdout/stderr. Use for build/test/git.',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'The shell command to execute.' },
+        timeoutMs: { type: 'number', description: 'Optional timeout in ms (default 60000).' }
+      },
+      required: ['command']
+    }
+  }
+]
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s
+  return s.slice(0, max) + `\n... [truncated ${s.length - max} chars]`
+}
+
+// Resolve a path and ensure it stays within the project root.
+function safeResolve(ctx: ToolContext, rel: string): string {
+  const root = path.resolve(ctx.workdir)
+  const abs = path.resolve(root, rel || '.')
+  const relToRoot = path.relative(root, abs)
+  if (relToRoot.startsWith('..') || path.isAbsolute(relToRoot)) {
+    throw new Error(`Path escapes project root: ${rel}`)
+  }
+  return abs
+}
+
+function formatWithLineNumbers(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line, i) => `${String(i + 1).padStart(4, ' ')} | ${line}`)
+    .join('\n')
+}
+
+async function execTool(ctx: ToolContext, call: ToolCall): Promise<ToolResult> {
+  const { name, args, id } = call
+  try {
+    switch (name) {
+      case 'read_file': {
+        const abs = safeResolve(ctx, String(args.path ?? ''))
+        const stat = fs.statSync(abs)
+        if (stat.isDirectory()) throw new Error('Path is a directory, use list_dir.')
+        const content = fs.readFileSync(abs, 'utf8')
+        return { id, name, ok: true, output: truncate(formatWithLineNumbers(content), MAX_FILE_CHARS) }
+      }
+      case 'write_file': {
+        const abs = safeResolve(ctx, String(args.path ?? ''))
+        fs.mkdirSync(path.dirname(abs), { recursive: true })
+        fs.writeFileSync(abs, String(args.content ?? ''), 'utf8')
+        return { id, name, ok: true, output: `Wrote ${String(args.content ?? '').length} chars to ${args.path}` }
+      }
+      case 'list_dir': {
+        const abs = safeResolve(ctx, String(args.path ?? '.'))
+        const entries = fs.readdirSync(abs, { withFileTypes: true })
+        const lines = entries.map((e) => `${e.isDirectory() ? '[dir] ' : '[file]'} ${e.name}`)
+        return { id, name, ok: true, output: lines.join('\n') || '(empty)' }
+      }
+      case 'run_command': {
+        const command = String(args.command ?? '')
+        if (!command.trim()) throw new Error('Empty command.')
+        const timeoutMs = Number(args.timeoutMs ?? 60_000)
+        try {
+          const { stdout, stderr } = await execAsync(command, {
+            cwd: path.resolve(ctx.workdir),
+            timeout: timeoutMs,
+            maxBuffer: 16 * 1024 * 1024,
+            windowsHide: true
+          })
+          const out = [stdout, stderr].filter(Boolean).join('\n')
+          return { id, name, ok: true, output: truncate(out || '(no output)', MAX_OUTPUT_CHARS) }
+        } catch (e: any) {
+          const out = [e?.stdout, e?.stderr, e?.message].filter(Boolean).join('\n')
+          return { id, name, ok: false, output: truncate(out, MAX_OUTPUT_CHARS) }
+        }
+      }
+      default:
+        return { id, name, ok: false, output: `Unknown tool: ${name}` }
+    }
+  } catch (e: any) {
+    return { id, name, ok: false, output: `Error: ${e?.message ?? String(e)}` }
+  }
+}
+
+export async function runTool(ctx: ToolContext, call: ToolCall): Promise<ToolResult> {
+  return execTool(ctx, call)
+}
