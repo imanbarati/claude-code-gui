@@ -14,6 +14,8 @@ settings panel.
 - 🛠️ **Real agentic tools**: `read_file`, `write_file`, `list_dir`, `run_command` — sandboxed to your chosen project folder.
 - 👀 **Live tool cards** showing exactly what the agent reads, writes, and runs.
 - 🛡️ **Approval gate + diff preview**: before any file write or shell command, you get a confirm dialog with a unified diff — deny to stop it.
+- 🔴 **Live streaming shell output**: watch builds, tests, and commands run in real time, with a pulsing "running…" indicator.
+- 📝 **Markdown rendering**: agent replies render code blocks (with copy buttons), lists, headings, and formatting.
 - 💬 **Multi-turn memory** — the agent remembers the conversation; chats **persist** across restarts, with a **＋ New Chat** button to reset.
 - ⚙️ **Settings panel** to pick backend, model, API key, Ollama URL, and working directory.
 - 📦 **Windows installer** (`.exe`) and portable build via electron-builder.

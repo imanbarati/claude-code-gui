@@ -63,6 +63,7 @@ export type AgentEvent =
   | { type: 'assistant_message'; message: ChatMessage }
   | { type: 'tool_call'; call: ToolCall }
   | { type: 'tool_result'; result: ToolResult }
+  | { type: 'command_output'; callId: string; chunk: string }
   | { type: 'step'; step: number }
   | { type: 'tool_approval'; call: ToolCall; preview: ToolPreview }
   | { type: 'done' }

@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from '@shared/types'
 import type { Settings, ChatMessage, AgentEvent, ToolPreview, ToolCall } from '@shared/types'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ApprovalModal } from './components/ApprovalModal'
+import { Markdown } from './components/Markdown'
 
 function uid(p: string): string {
   return `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
@@ -75,13 +76,50 @@ export function App(): JSX.Element {
           })
           break
         }
+        case 'command_output': {
+          // Append streaming stdout/stderr to the matching tool card.
+          setMessages((prev) => {
+            const copy = [...prev]
+            for (let i = copy.length - 1; i >= 0; i--) {
+              const m = copy[i]
+              if (m.toolCalls && m.toolCalls.some((c) => c.id === event.callId)) {
+                const existing = (m.toolResults ?? []).find((r) => r.id === event.callId)
+                if (existing) {
+                  const updated = m.toolResults!.map((r) =>
+                    r.id === event.callId ? { ...r, output: r.output + event.chunk, ok: true } : r
+                  )
+                  copy[i] = { ...m, toolResults: updated }
+                } else {
+                  copy[i] = {
+                    ...m,
+                    toolResults: [
+                      ...(m.toolResults ?? []),
+                      { id: event.callId, name: 'run_command', ok: true, output: event.chunk }
+                    ]
+                  }
+                }
+                break
+              }
+            }
+            return copy
+          })
+          break
+        }
         case 'tool_result': {
+          // Replace the streaming output with the final, complete result.
           setMessages((prev) => {
             const copy = [...prev]
             for (let i = copy.length - 1; i >= 0; i--) {
               const m = copy[i]
               if (m.toolCalls && m.toolCalls.some((c) => c.id === event.result.id)) {
-                copy[i] = { ...m, toolResults: [...(m.toolResults ?? []), event.result] }
+                const idx = (m.toolResults ?? []).findIndex((r) => r.id === event.result.id)
+                if (idx >= 0) {
+                  const updated = [...m.toolResults!]
+                  updated[idx] = event.result
+                  copy[i] = { ...m, toolResults: updated }
+                } else {
+                  copy[i] = { ...m, toolResults: [...(m.toolResults ?? []), event.result] }
+                }
                 break
               }
             }
@@ -247,24 +285,39 @@ function MessageView({ message }: { message: ChatMessage }): JSX.Element {
       {message.content && (
         <>
           <span className="role">Agent</span>
-          <div className="bubble">{message.content}</div>
+          <div className="bubble"><Markdown text={message.content} /></div>
         </>
       )}
       {message.toolCalls?.map((call) => {
         const result = message.toolResults?.find((r) => r.id === call.id)
+        const isCommand = call.name === 'run_command'
         return (
           <div className="toolcard" key={call.id}>
             <div className="th">
               <span>🔧 {call.name}</span>
               <span className="spacer" style={{ flex: 1 }} />
               {result ? (
-                <span className={result.ok ? 'ok' : 'bad'}>{result.ok ? 'ok' : 'error'}</span>
+                <>
+                  {isCommand && (
+                    <button
+                      className="md-copy"
+                      onClick={() => void navigator.clipboard.writeText(result.output)}
+                      title="Copy output"
+                    >
+                      Copy
+                    </button>
+                  )}
+                  <span className={result.ok ? 'ok' : 'bad'}>{result.ok ? 'ok' : 'error'}</span>
+                </>
               ) : (
-                <span className="bad">running…</span>
+                <span className="bad running-dot">running…</span>
               )}
             </div>
-            <pre>{JSON.stringify(call.args, null, 2)}</pre>
-            {result && <pre>{result.output}</pre>}
+            {!isCommand && <pre>{JSON.stringify(call.args, null, 2)}</pre>}
+            {isCommand && !result && call.args.command ? (
+              <pre className="cmd-line">$ {String(call.args.command)}</pre>
+            ) : null}
+            {result && <pre className={isCommand ? 'cmd-out' : ''}>{result.output}</pre>}
           </div>
         )
       })}

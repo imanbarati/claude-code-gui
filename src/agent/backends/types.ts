@@ -3,6 +3,7 @@ import { runTool, previewTool, isMutatingTool, type ToolContext } from '../tools
 
 // Run a list of tool calls, applying the approval gate to mutating tools.
 // Emits tool_call / tool_result events and returns the results for the loop.
+// Streams run_command output live via command_output events.
 export async function runToolsWithApproval(
   ctx: ToolContext,
   calls: ToolCall[],
@@ -30,7 +31,12 @@ export async function runToolsWithApproval(
       }
     }
 
-    const result = await runTool(ctx, call)
+    const onOutput =
+      call.name === 'run_command'
+        ? (chunk: string) => onEvent({ type: 'command_output', callId: call.id, chunk })
+        : undefined
+
+    const result = await runTool(ctx, call, onOutput)
     onEvent({ type: 'tool_result', result })
     results.push(result)
   }

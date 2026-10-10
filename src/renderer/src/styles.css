@@ -164,3 +164,53 @@ html, body, #root {
 .modal-note code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .modal-actions .btn { padding: 8px 18px; font-size: 14px; }
+
+/* Markdown rendering inside assistant bubbles */
+.md { font-size: 14px; line-height: 1.55; }
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child { margin-bottom: 0; }
+.md p { margin: 8px 0; white-space: pre-wrap; word-break: break-word; }
+.md h3, .md h4, .md h5 { margin: 14px 0 6px; line-height: 1.3; }
+.md h3 { font-size: 16px; }
+.md h4 { font-size: 15px; }
+.md h5 { font-size: 14px; }
+.md ul, .md ol { margin: 8px 0; padding-left: 22px; }
+.md li { margin: 3px 0; }
+.md blockquote {
+  margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--accent);
+  color: var(--muted); background: var(--panel-2); border-radius: 0 6px 6px 0;
+}
+.md a { color: var(--accent); }
+.md-code {
+  font-family: "Cascadia Code","Consolas",monospace; font-size: 12.5px;
+  background: #0c0e14; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+}
+.md-pre-wrap {
+  margin: 10px 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  background: #0c0e14;
+}
+.md-pre-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #1a1d29; border-bottom: 1px solid var(--border); padding: 4px 8px;
+}
+.md-lang { font-size: 11px; color: var(--muted); text-transform: lowercase; }
+.md-copy {
+  background: transparent; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 5px; padding: 2px 8px; font-size: 11px; cursor: pointer;
+}
+.md-copy:hover { color: var(--text); border-color: var(--accent); }
+.md-pre-wrap pre { margin: 0; padding: 10px 12px; overflow: auto; max-height: 460px; }
+.md-pre-wrap code {
+  font-family: "Cascadia Code","Consolas",monospace; font-size: 12.5px; line-height: 1.5;
+  white-space: pre; color: #d7dce6;
+}
+
+/* Command streaming in tool cards */
+.cmd-line {
+  margin: 0; padding: 6px 10px; color: var(--accent);
+  font-family: "Cascadia Code","Consolas",monospace; font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.cmd-out { color: #c8cfdb; }
+.running-dot { animation: pulse 1.1s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }

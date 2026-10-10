@@ -72,6 +72,18 @@ async function main(): Promise<void> {
   const pEsc = previewTool(ctx, { id: 'p4', name: 'write_file', args: { path: '../x.txt', content: 'x' } })
   check('preview escape blocked', pEsc.summary.includes('Blocked'))
 
+  // --- streaming command output ---
+  let streamed = ''
+  const cStream = await runTool(ctx, { id: '9', name: 'run_command', args: { command: 'echo streaming-test' } }, (chunk) => {
+    streamed += chunk
+  })
+  check('run_command streams via onOutput', streamed.toLowerCase().includes('streaming-test'), streamed)
+  check('run_command final result ok + exit code', cStream.ok && cStream.output.includes('exit code 0'), cStream.output)
+
+  // failing command reports non-zero exit
+  const cFail = await runTool(ctx, { id: '10', name: 'run_command', args: { command: process.platform === 'win32' ? 'exit /b 3' : 'exit 3' } })
+  check('run_command reports failure exit code', !cFail.ok && /exit code 3/.test(cFail.output), cFail.output)
+
   console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : failures + ' TEST(S) FAILED'}`)
   process.exit(failures === 0 ? 0 : 1)
 }

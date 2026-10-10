@@ -1,13 +1,13 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { exec } from 'node:child_process'
-import { promisify } from 'node:util'
+import { spawn } from 'node:child_process'
 import type { ToolCall, ToolResult, ToolPreview } from '@shared/types'
-
-const execAsync = promisify(exec)
 
 const MAX_FILE_CHARS = 120_000
 const MAX_OUTPUT_CHARS = 40_000
+
+// Callback for streaming incremental output (used by run_command).
+export type OutputCallback = (chunk: string) => void
 
 export interface ToolContext {
   workdir: string
@@ -95,7 +95,7 @@ function formatWithLineNumbers(text: string): string {
     .join('\n')
 }
 
-async function execTool(ctx: ToolContext, call: ToolCall): Promise<ToolResult> {
+async function execTool(ctx: ToolContext, call: ToolCall, onOutput?: OutputCallback): Promise<ToolResult> {
   const { name, args, id } = call
   try {
     switch (name) {
@@ -122,19 +122,7 @@ async function execTool(ctx: ToolContext, call: ToolCall): Promise<ToolResult> {
         const command = String(args.command ?? '')
         if (!command.trim()) throw new Error('Empty command.')
         const timeoutMs = Number(args.timeoutMs ?? 60_000)
-        try {
-          const { stdout, stderr } = await execAsync(command, {
-            cwd: path.resolve(ctx.workdir),
-            timeout: timeoutMs,
-            maxBuffer: 16 * 1024 * 1024,
-            windowsHide: true
-          })
-          const out = [stdout, stderr].filter(Boolean).join('\n')
-          return { id, name, ok: true, output: truncate(out || '(no output)', MAX_OUTPUT_CHARS) }
-        } catch (e: any) {
-          const out = [e?.stdout, e?.stderr, e?.message].filter(Boolean).join('\n')
-          return { id, name, ok: false, output: truncate(out, MAX_OUTPUT_CHARS) }
-        }
+        return await runCommandStreaming(ctx, id, command, timeoutMs, onOutput)
       }
       default:
         return { id, name, ok: false, output: `Unknown tool: ${name}` }
@@ -144,8 +132,57 @@ async function execTool(ctx: ToolContext, call: ToolCall): Promise<ToolResult> {
   }
 }
 
-export async function runTool(ctx: ToolContext, call: ToolCall): Promise<ToolResult> {
-  return execTool(ctx, call)
+// Run a shell command via spawn so stdout/stderr stream live to the UI.
+function runCommandStreaming(
+  ctx: ToolContext,
+  id: string,
+  command: string,
+  timeoutMs: number,
+  onOutput?: OutputCallback
+): Promise<ToolResult> {
+  return new Promise<ToolResult>((resolve) => {
+    const isWin = process.platform === 'win32'
+    const child = isWin
+      ? spawn(command, { cwd: path.resolve(ctx.workdir), shell: true, windowsHide: true })
+      : spawn('bash', ['-lc', command], { cwd: path.resolve(ctx.workdir), windowsHide: true })
+
+    let combined = ''
+    let timedOut = false
+
+    const append = (s: string): void => {
+      combined += s
+      onOutput?.(s)
+    }
+
+    const timer = setTimeout(() => {
+      timedOut = true
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        /* ignore */
+      }
+    }, timeoutMs)
+
+    child.stdout?.on('data', (d: Buffer) => append(d.toString('utf8')))
+    child.stderr?.on('data', (d: Buffer) => append(d.toString('utf8')))
+
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      resolve({ id, name: 'run_command', ok: false, output: truncate(`${combined}\n${err.message}`, MAX_OUTPUT_CHARS) })
+    })
+
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      const ok = code === 0 && !timedOut
+      const suffix = timedOut ? `\n[timed out after ${timeoutMs}ms]` : `\n[exit code ${code}]`
+      const out = truncate((combined || '(no output)') + suffix, MAX_OUTPUT_CHARS)
+      resolve({ id, name: 'run_command', ok, output: out })
+    })
+  })
+}
+
+export async function runTool(ctx: ToolContext, call: ToolCall, onOutput?: OutputCallback): Promise<ToolResult> {
+  return execTool(ctx, call, onOutput)
 }
 
 
