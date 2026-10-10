@@ -18,5 +18,8 @@ Thumbs.db
 .env
 .env.local
 
+# TS build info
+*.tsbuildinfo
+
 # electron-builder caches
 cache/
