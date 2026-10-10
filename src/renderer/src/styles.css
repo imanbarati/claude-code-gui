@@ -205,6 +205,16 @@ html, body, #root {
   white-space: pre; color: #d7dce6;
 }
 
+/* Syntax highlight token colors */
+.tok-keyword { color: #ff7b9c; }
+.tok-string { color: #9ece8a; }
+.tok-number { color: #e0af68; }
+.tok-comment { color: #5c6373; font-style: italic; }
+.tok-func { color: #7aa2f7; }
+.tok-type { color: #2ac3de; }
+.tok-punct { color: #a9b1d6; }
+.tok-plain { color: #d7dce6; }
+
 /* Command streaming in tool cards */
 .cmd-line {
   margin: 0; padding: 6px 10px; color: var(--accent);
@@ -216,6 +226,17 @@ html, body, #root {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* @file mention chips + toast */
+.quick-actions {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+}
+.qa-btn {
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+  border-radius: 999px; padding: 4px 11px; font-size: 12px; cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.qa-btn:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.qa-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.qa-icon { margin-right: 2px; }
 .mention-chips {
   display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;
 }

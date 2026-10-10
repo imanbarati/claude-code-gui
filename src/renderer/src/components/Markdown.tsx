@@ -3,6 +3,7 @@
 // headings (#..###), unordered/ordered lists, blockquotes (>), and links.
 
 import type { ReactNode } from 'react'
+import { tokenize } from './highlight'
 
 // Render inline markdown within a single line of text.
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
@@ -146,6 +147,7 @@ export function Markdown({ text }: { text: string }): JSX.Element {
 }
 
 function CodeBlock({ code, lang }: { code: string; lang: string }): JSX.Element {
+  const tokens = tokenize(code, lang)
   return (
     <div className="md-pre-wrap">
       <div className="md-pre-bar">
@@ -154,7 +156,15 @@ function CodeBlock({ code, lang }: { code: string; lang: string }): JSX.Element 
           Copy
         </button>
       </div>
-      <pre><code>{code}</code></pre>
+      <pre>
+        <code>
+          {tokens.map((t, i) => (
+            <span key={i} className={`tok tok-${t.kind}`}>
+              {t.text}
+            </span>
+          ))}
+        </code>
+      </pre>
     </div>
   )
 }

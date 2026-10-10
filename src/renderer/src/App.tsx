@@ -4,6 +4,7 @@ import type { Settings, ChatMessage, AgentEvent, ToolPreview, ToolCall } from '@
 import { SettingsPanel } from './components/SettingsPanel'
 import { ApprovalModal } from './components/ApprovalModal'
 import { Markdown } from './components/Markdown'
+import { PROMPT_TEMPLATES } from './components/templates'
 
 function uid(p: string): string {
   return `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
@@ -270,6 +271,19 @@ export function App(): JSX.Element {
           </div>
 
           <div className="composer">
+            <div className="quick-actions">
+              {PROMPT_TEMPLATES.map((t) => (
+                <button
+                  key={t.id}
+                  className="qa-btn"
+                  disabled={running}
+                  title={t.build({ workdir: settings.workdir })}
+                  onClick={() => setInput(t.build({ workdir: settings.workdir }))}
+                >
+                  <span className="qa-icon">{t.icon}</span> {t.label}
+                </button>
+              ))}
+            </div>
             {mentions.length > 0 && (
               <div className="mention-chips">
                 {mentions.map((m) => (
