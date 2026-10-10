@@ -182,9 +182,20 @@ html, body, #root {
 .modal-diff {
   font-family: "Cascadia Code","Consolas",monospace; font-size: 12px; line-height: 1.45;
   background: #0c0e14; border: 1px solid var(--border); border-radius: 8px;
-  padding: 10px 12px; margin: 0; white-space: pre-wrap; word-break: break-word;
-  max-height: 300px; overflow: auto;
+  padding: 6px 0; margin: 0; max-height: 300px; overflow: auto;
 }
+.diff-legend { display: flex; gap: 10px; margin: 8px 0 4px; font-size: 12px; font-family: "Cascadia Code","Consolas",monospace; }
+.legend-add { color: var(--ok); }
+.legend-del { color: var(--err); }
+.diff-line { display: flex; padding: 0 10px; white-space: pre; }
+.diff-sign { width: 14px; flex-shrink: 0; color: var(--muted); user-select: none; }
+.diff-text { white-space: pre-wrap; word-break: break-word; }
+.diff-add { background: rgba(63,185,80,0.12); }
+.diff-add .diff-sign, .diff-add .diff-text { color: #7ee787; }
+.diff-del { background: rgba(248,81,73,0.12); }
+.diff-del .diff-sign, .diff-del .diff-text { color: #ffa198; }
+.diff-meta { color: var(--muted); background: #12151f; }
+.diff-ctx { color: #a9b1d6; }
 .modal-note { margin: 12px 0; font-size: 12px; color: var(--muted); }
 .modal-note code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }

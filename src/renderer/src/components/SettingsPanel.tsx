@@ -38,6 +38,10 @@ export function SettingsPanel({ settings, onChange }: Props): JSX.Element {
         .then((m) => {
           setModels(m)
           setModelStatus(m.length ? `${m.length} models` : 'no models found')
+          // Auto-select the first installed model if the current one is missing.
+          if (m.length > 0 && !m.includes(settings.ollamaModel)) {
+            onChange({ ...settings, ollamaModel: m[0] })
+          }
         })
         .catch((e: unknown) => {
           setModels([])

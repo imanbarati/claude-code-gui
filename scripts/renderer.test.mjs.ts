@@ -2,6 +2,7 @@
 // Bundled with esbuild then run with node.
 import { tokenize, normalizeLang } from '../src/renderer/src/components/highlight'
 import { PROMPT_TEMPLATES, buildPrompt } from '../src/renderer/src/components/templates'
+import { parseDiff } from '../src/renderer/src/components/ApprovalModal'
 
 let failures = 0
 function check(name: string, cond: boolean, extra = ''): void {
@@ -53,6 +54,13 @@ const noSel = buildPrompt('explain', { workdir: 'C:\\proj' })
 check('template falls back to workdir', noSel.includes('C:\\proj'))
 
 check('buildPrompt unknown id returns empty', buildPrompt('nope', { workdir: '' }) === '')
+
+// --- diff parsing ---
+const diff = '  context line\n- old thing\n+ new thing\n@@ hunk @@'
+const dl = parseDiff(diff)
+check('parseDiff classifies lines', dl[0].kind === 'ctx' && dl[1].kind === 'del' && dl[2].kind === 'add' && dl[3].kind === 'meta', JSON.stringify(dl.map((l) => l.kind)))
+check('parseDiff strips markers', dl[1].text === 'old thing' && dl[2].text === 'new thing', JSON.stringify(dl.map((l) => l.text)))
+check('parseDiff context strips 2 spaces', dl[0].text === 'context line')
 
 console.log(`\n${failures === 0 ? 'ALL TESTS PASSED' : failures + ' TEST(S) FAILED'}`)
 process.exit(failures === 0 ? 0 : 1)
