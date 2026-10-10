@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '@shared/types'
-import type { Settings, RunRequest, AgentEvent, Conversation, ApprovalDecision } from '@shared/types'
+import type { Settings, RunRequest, AgentEvent, Conversation, ConversationSummary, ApprovalDecision, ChatMessage } from '@shared/types'
 
 const api = {
   getSettings: (): Promise<Settings> => ipcRenderer.invoke(IPC.getSettings),
@@ -11,9 +11,14 @@ const api = {
   cancelAgent: (): Promise<void> => ipcRenderer.invoke(IPC.cancelAgent),
   approveTool: (decision: ApprovalDecision): Promise<void> => ipcRenderer.invoke(IPC.approveTool, decision),
   getConversation: (): Promise<Conversation> => ipcRenderer.invoke(IPC.getConversation),
-  setConversation: (c: Conversation): Promise<Conversation> => ipcRenderer.invoke(IPC.setConversation, c),
+  setConversation: (messages: ChatMessage[]): Promise<Conversation> =>
+    ipcRenderer.invoke(IPC.setConversation, { messages }),
   clearConversation: (): Promise<void> => ipcRenderer.invoke(IPC.clearConversation),
   exportChat: (): Promise<string | null> => ipcRenderer.invoke(IPC.exportChat),
+  listConversations: (): Promise<ConversationSummary[]> => ipcRenderer.invoke(IPC.listConversations),
+  newConversation: (): Promise<Conversation> => ipcRenderer.invoke(IPC.newConversation),
+  selectConversation: (id: string): Promise<Conversation | null> => ipcRenderer.invoke(IPC.selectConversation, id),
+  deleteConversation: (id: string): Promise<Conversation> => ipcRenderer.invoke(IPC.deleteConversation, id),
   previewMentions: (prompt: string, workdir: string): Promise<Array<{ path: string; exists: boolean }>> =>
     ipcRenderer.invoke('agent:previewMentions', prompt, workdir),
   onAgentEvent: (cb: (event: AgentEvent) => void): (() => void) => {

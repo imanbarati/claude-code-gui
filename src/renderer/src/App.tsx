@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS } from '@shared/types'
-import type { Settings, ChatMessage, AgentEvent, ToolPreview, ToolCall } from '@shared/types'
+import type { Settings, ChatMessage, AgentEvent, ToolPreview, ToolCall, ConversationSummary } from '@shared/types'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ApprovalModal } from './components/ApprovalModal'
 import { Markdown } from './components/Markdown'
 import { PROMPT_TEMPLATES } from './components/templates'
+import { Sidebar } from './components/Sidebar'
 
 function uid(p: string): string {
   return `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
@@ -24,18 +25,30 @@ export function App(): JSX.Element {
   const [approval, setApproval] = useState<PendingApproval | null>(null)
   const [mentions, setMentions] = useState<Array<{ path: string; exists: boolean }>>([])
   const [toast, setToast] = useState<string>('')
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const [activeId, setActiveId] = useState<string>('')
+  const [showSidebar, setShowSidebar] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
+
+  const refreshConversations = (): void => {
+    window.api.listConversations().then(setConversations).catch(() => {})
+  }
 
   // Load settings + persisted conversation on startup.
   useEffect(() => {
     window.api.getSettings().then(setSettings).catch(() => {})
-    window.api.getConversation().then((c) => setMessages(c.messages ?? [])).catch(() => {})
+    window.api.getConversation().then((c) => {
+      setMessages(c.messages ?? [])
+      setActiveId(c.id)
+    }).catch(() => {})
+    refreshConversations()
   }, [])
 
   // Persist conversation whenever it changes (debounced-ish via timeout).
   useEffect(() => {
     const t = setTimeout(() => {
-      window.api.setConversation({ messages }).catch(() => {})
+      window.api.setConversation(messages).catch(() => {})
+      refreshConversations()
     }, 400)
     return () => clearTimeout(t)
   }, [messages])
@@ -215,10 +228,36 @@ export function App(): JSX.Element {
 
   const newChat = (): void => {
     if (running) window.api.cancelAgent()
-    setMessages([])
-    setApproval(null)
-    setRunning(false)
-    window.api.clearConversation().catch(() => {})
+    window.api.newConversation().then((c) => {
+      setMessages([])
+      setActiveId(c.id)
+      setApproval(null)
+      setRunning(false)
+      refreshConversations()
+    }).catch(() => {})
+  }
+
+  const selectConv = (id: string): void => {
+    if (id === activeId) return
+    if (running) window.api.cancelAgent()
+    window.api.selectConversation(id).then((c) => {
+      if (c) {
+        setMessages(c.messages ?? [])
+        setActiveId(c.id)
+        setApproval(null)
+        setRunning(false)
+        refreshConversations()
+      }
+    }).catch(() => {})
+  }
+
+  const deleteConv = (id: string): void => {
+    window.api.deleteConversation(id).then((c) => {
+      setMessages(c.messages ?? [])
+      setActiveId(c.id)
+      setRunning(false)
+      refreshConversations()
+    }).catch(() => {})
   }
 
   const exportChat = (): void => {
@@ -237,6 +276,9 @@ export function App(): JSX.Element {
       <div className="titlebar">
         <div className="logo" />
         <h1>Claude Code GUI</h1>
+        <button className="btn" onClick={() => setShowSidebar((s) => !s)} title="Chat history">
+          {showSidebar ? '☰ Hide' : '☰ Chats'}
+        </button>
         {settings.workdir && <span className="workdir-pill">{settings.workdir}</span>}
         <div className="spacer" />
         <button className="btn" onClick={exportChat} disabled={messages.length === 0} title="Export this chat to Markdown">
@@ -255,6 +297,16 @@ export function App(): JSX.Element {
       {toast && <div className="toast">{toast}</div>}
 
       <div className="body">
+        {showSidebar && (
+          <Sidebar
+            conversations={conversations}
+            activeId={activeId}
+            onSelect={selectConv}
+            onNew={newChat}
+            onDelete={deleteConv}
+            onClose={() => setShowSidebar(false)}
+          />
+        )}
         <div className="main-col">
           <div className="chat" ref={chatRef}>
             {messages.length === 0 ? (

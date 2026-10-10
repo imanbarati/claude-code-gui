@@ -19,6 +19,7 @@ settings panel.
 - 🎨 **Syntax highlighting**: code blocks are colorized for JS/TS, Python, Go, Rust, Java, C/C++, Bash, JSON and more.
 - ⚡ **Quick actions**: one-click starter prompts (Explain, Write tests, Review & fix, Refactor, Docs, Scaffold).
 - 💬 **Multi-turn memory** — the agent remembers the conversation; chats **persist** across restarts, with a **＋ New Chat** button to reset.
+- 🗂️ **Conversation history sidebar** — multiple saved chats you can switch between, create, and delete (auto-titled from the first message).
 - 📎 **@file context** — type `@filename` in the composer to attach a file's contents to your prompt (live chips show which files were found).
 - ⤓ **Export chat** — save the whole conversation (with tool calls & outputs) to a Markdown file.
 - ⚙️ **Settings panel** to pick backend, model, API key, Ollama URL, and working directory.

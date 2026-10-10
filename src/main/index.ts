@@ -4,7 +4,7 @@ import path from 'node:path'
 import * as fs from 'node:fs'
 import Store from 'electron-store'
 import { IPC, DEFAULT_SETTINGS } from '@shared/types'
-import type { Settings, RunRequest, AgentEvent, ChatMessage, Conversation, ApprovalDecision, ToolPreview, ToolCall } from '@shared/types'
+import type { Settings, RunRequest, AgentEvent, ChatMessage, Conversation, ConversationSummary, ApprovalDecision, ToolPreview, ToolCall } from '@shared/types'
 import type { ChatTurn } from '../agent/backends/types'
 import { getBackend, listModels } from '../agent/orchestrator'
 import { expandMentions, extractMentions } from '../agent/context'
@@ -13,19 +13,83 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 interface StoreSchema {
   settings: Settings
-  conversation: Conversation
+  conversations: Conversation[]
+  activeId: string
+}
+
+function makeId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function newConversation(): Conversation {
+  const now = Date.now()
+  return { id: makeId('conv'), title: 'New chat', createdAt: now, updatedAt: now, messages: [] }
 }
 
 const store = new Store<StoreSchema>({
   name: 'claude-code-gui',
-  defaults: { settings: DEFAULT_SETTINGS, conversation: { messages: [] } }
+  defaults: { settings: DEFAULT_SETTINGS, conversations: [], activeId: '' }
 })
+
+// One-time migration: ensure at least one conversation + a valid activeId.
+function ensureConversations(): void {
+  let convs = store.get('conversations') ?? []
+  if (!Array.isArray(convs) || convs.length === 0) {
+    convs = [newConversation()]
+    store.set('conversations', convs)
+  }
+  const activeId = store.get('activeId')
+  if (!activeId || !convs.some((c) => c.id === activeId)) {
+    store.set('activeId', convs[0].id)
+  }
+}
+
+function getConversations(): Conversation[] {
+  ensureConversations()
+  return store.get('conversations')
+}
+
+function getActiveId(): string {
+  ensureConversations()
+  return store.get('activeId')
+}
+
+function getActiveConversation(): Conversation {
+  const convs = getConversations()
+  const id = getActiveId()
+  return convs.find((c) => c.id === id) ?? convs[0]
+}
+
+function updateActive(updater: (c: Conversation) => Conversation): Conversation {
+  const convs = getConversations()
+  const id = getActiveId()
+  const idx = convs.findIndex((c) => c.id === id)
+  const updated = updater(convs[idx])
+  updated.updatedAt = Date.now()
+  // Derive a title from the first user message if still default.
+  if (updated.title === 'New chat' || !updated.title.trim()) {
+    const firstUser = updated.messages.find((m) => m.role === 'user')
+    if (firstUser) updated.title = firstUser.content.slice(0, 48) || 'New chat'
+  }
+  convs[idx] = updated
+  store.set('conversations', convs)
+  return updated
+}
+
+// Derive a title from the first user message.
+function titleFromMessages(messages: ChatMessage[]): string {
+  const firstUser = messages.find((m) => m.role === 'user')
+  if (!firstUser) return 'New chat'
+  const t = firstUser.content.trim().replace(/\s+/g, ' ')
+  return t.length > 48 ? t.slice(0, 48) + '…' : t || 'New chat'
+}
 
 let mainWindow: BrowserWindow | null = null
 let currentAbort: AbortController | null = null
 
 // In-memory conversation history shared across turns of a session.
 let historyTurns: ChatTurn[] = []
+let activeConversationId: string | null = null
 
 // Pending approval prompts keyed by tool-call id.
 const pendingApprovals = new Map<string, (approved: boolean) => void>()
@@ -112,17 +176,67 @@ function registerIpc(): void {
     return listModels(settings)
   })
 
-  ipcMain.handle(IPC.getConversation, (): Conversation => store.get('conversation'))
+  ipcMain.handle(IPC.getConversation, (): Conversation => getActiveConversation())
 
-  ipcMain.handle(IPC.setConversation, (_e, conv: Conversation) => {
-    store.set('conversation', conv)
-    historyTurns = turnsFromMessages(conv.messages)
-    return conv
+  ipcMain.handle(IPC.setConversation, (_e, conv: { messages: ChatMessage[] }) => {
+    const updated = updateActive((c) => ({ ...c, messages: conv.messages, title: c.title }))
+    historyTurns = turnsFromMessages(updated.messages)
+    return updated
   })
 
   ipcMain.handle(IPC.clearConversation, () => {
-    store.set('conversation', { messages: [] })
+    updateActive((c) => ({ ...c, messages: [], title: 'New chat' }))
     historyTurns = []
+  })
+
+  // --- Multi-conversation management ---
+  ipcMain.handle(IPC.listConversations, (): ConversationSummary[] => {
+    return getConversations()
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        messageCount: c.messages.length
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+  })
+
+  ipcMain.handle(IPC.newConversation, (): Conversation => {
+    const conv = newConversation()
+    const convs = getConversations()
+    convs.unshift(conv)
+    store.set('conversations', convs)
+    store.set('activeId', conv.id)
+    historyTurns = []
+    activeConversationId = conv.id
+    return conv
+  })
+
+  ipcMain.handle(IPC.selectConversation, (_e, id: string): Conversation | null => {
+    const convs = getConversations()
+    const conv = convs.find((c) => c.id === id)
+    if (!conv) return null
+    store.set('activeId', id)
+    historyTurns = turnsFromMessages(conv.messages)
+    activeConversationId = id
+    return conv
+  })
+
+  ipcMain.handle(IPC.deleteConversation, (_e, id: string): Conversation => {
+    let convs = getConversations()
+    convs = convs.filter((c) => c.id !== id)
+    if (convs.length === 0) convs = [newConversation()]
+    store.set('conversations', convs)
+    // If we deleted the active one, switch to the most recent remaining.
+    if (store.get('activeId') === id) {
+      const next = convs.sort((a, b) => b.updatedAt - a.updatedAt)[0]
+      store.set('activeId', next.id)
+      historyTurns = turnsFromMessages(next.messages)
+      activeConversationId = next.id
+      return next
+    }
+    return getActiveConversation()
   })
 
   ipcMain.handle(IPC.cancelAgent, () => {
@@ -165,9 +279,9 @@ function registerIpc(): void {
       })
     }
 
-    // Seed in-memory history from persisted conversation if empty.
+    // Seed in-memory history from the active conversation if empty.
     if (historyTurns.length === 0) {
-      historyTurns = turnsFromMessages(store.get('conversation').messages)
+      historyTurns = turnsFromMessages(getActiveConversation().messages)
     }
     const historySnapshot = [...historyTurns]
 
@@ -218,10 +332,10 @@ function registerIpc(): void {
     })
   })
 
-  // Export the conversation to a Markdown file chosen by the user.
+  // Export the active conversation to a Markdown file chosen by the user.
   ipcMain.handle(IPC.exportChat, async () => {
     if (!mainWindow) return null
-    const conv = store.get('conversation')
+    const conv = getActiveConversation()
     const md = conversationToMarkdown(conv.messages)
     const res = await dialog.showSaveDialog(mainWindow, {
       title: 'Export chat',

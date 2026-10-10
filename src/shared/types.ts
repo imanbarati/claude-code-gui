@@ -92,7 +92,20 @@ export interface ApprovalDecision {
 
 // The persisted conversation (survives app restart).
 export interface Conversation {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
   messages: ChatMessage[]
+}
+
+// Lightweight metadata for the sidebar list.
+export interface ConversationSummary {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  messageCount: number
 }
 
 // IPC channel names.
@@ -108,5 +121,9 @@ export const IPC = {
   getConversation: 'conversation:get',
   setConversation: 'conversation:set',
   clearConversation: 'conversation:clear',
-  exportChat: 'conversation:export'
+  exportChat: 'conversation:export',
+  listConversations: 'conversation:list',
+  newConversation: 'conversation:new',
+  selectConversation: 'conversation:select',
+  deleteConversation: 'conversation:delete'
 } as const
